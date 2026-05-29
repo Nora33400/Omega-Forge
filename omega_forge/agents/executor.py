@@ -22,21 +22,43 @@ class ExecutorAgent(BaseAgent):
     def run(self, context: dict[str, Any]):
         root = Path(context.get("root", "."))
         queue_path = context.get("queue_path", root / "omega_forge_tasks.json")
+        max_tasks = int(context.get("max_tasks", 1))
+        max_tasks = max(1, min(max_tasks, 10))
+
         queue = TaskQueue(queue_path)
-        pending = queue.pending()
+        pending = sorted(queue.pending(), key=lambda item: item.priority)
 
         if not pending:
-            return self.ok("No pending task to execute", {"executed": False})
+            return self.ok("No pending task to execute", {"executed": False, "results": []})
 
-        task = sorted(pending, key=lambda item: item.priority)[0]
-        result = self.execute_task(root=root, title=task.title)
+        results: list[dict[str, Any]] = []
+        executed_count = 0
+        blocked_count = 0
 
-        if result["executed"]:
-            queue.set_status(task.id, "done", note=result["message"])
-            return self.ok(result["message"], {"executed": True, "task_id": task.id, **result})
+        for task in pending[:max_tasks]:
+            result = self.execute_task(root=root, title=task.title)
+            result = {"task_id": task.id, "task_title": task.title, **result}
+            results.append(result)
 
-        queue.set_status(task.id, "blocked", note=result["message"])
-        return self.fail(result["message"], {"executed": False, "task_id": task.id, **result})
+            if result["executed"]:
+                executed_count += 1
+                queue.set_status(task.id, "done", note=result["message"])
+            else:
+                blocked_count += 1
+                queue.set_status(task.id, "blocked", note=result["message"])
+
+        message = f"Executed {executed_count} task(s), blocked {blocked_count} task(s)"
+        success = executed_count > 0 and blocked_count == 0
+        data = {
+            "executed": executed_count > 0,
+            "executed_count": executed_count,
+            "blocked_count": blocked_count,
+            "max_tasks": max_tasks,
+            "results": results,
+        }
+        if success:
+            return self.ok(message, data)
+        return self.fail(message, data)
 
     @staticmethod
     def execute_task(root: Path, title: str) -> dict[str, Any]:
