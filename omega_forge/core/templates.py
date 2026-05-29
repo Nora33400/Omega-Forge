@@ -20,7 +20,11 @@ class ArtifactTemplate:
 
 
 def backend_template(context: WorkspaceContext) -> str:
-    return f'''"""Generated backend module for Omega-Forge.
+    return backend_library_template(context)
+
+
+def backend_library_template(context: WorkspaceContext) -> str:
+    return f'''"""Generated backend library module for Omega-Forge.
 
 This module was generated from an observed workspace context.
 Project type: {context.project_type}
@@ -36,8 +40,62 @@ def healthcheck() -> dict[str, str]:
 
     return {{
         "status": "ok",
-        "service": "omega_forge_generated_backend",
+        "service": "omega_forge_generated_backend_library",
         "project_type": "{context.project_type}",
+        "mode": "library",
+    }}
+'''
+
+
+def backend_cli_template(context: WorkspaceContext) -> str:
+    return f'''"""Generated backend CLI module for Omega-Forge."""
+
+from __future__ import annotations
+
+import json
+
+
+def healthcheck() -> dict[str, str]:
+    return {{
+        "status": "ok",
+        "service": "omega_forge_generated_backend_cli",
+        "project_type": "{context.project_type}",
+        "mode": "cli",
+    }}
+
+
+def main() -> int:
+    print(json.dumps(healthcheck(), indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+
+def backend_api_template(context: WorkspaceContext) -> str:
+    return f'''"""Generated backend API-style module for Omega-Forge.
+
+This is framework-neutral by design: it exposes route-like callables without
+requiring FastAPI, Flask, or any other runtime dependency.
+"""
+
+from __future__ import annotations
+
+
+def healthcheck() -> dict[str, str]:
+    return {{
+        "status": "ok",
+        "service": "omega_forge_generated_backend_api",
+        "project_type": "{context.project_type}",
+        "mode": "api",
+    }}
+
+
+def get_routes() -> dict[str, object]:
+    return {{
+        "GET /health": healthcheck,
     }}
 '''
 
@@ -50,6 +108,7 @@ def test_generated_backend_healthcheck():
     payload = healthcheck()
     assert payload["status"] == "ok"
     assert payload["project_type"] == "{context.project_type}"
+    assert payload["mode"] in {{"library", "cli", "api"}}
 '''
 
 
@@ -96,6 +155,21 @@ TEMPLATES: dict[str, ArtifactTemplate] = {
         name="backend",
         output_path="omega_forge/generated_backend.py",
         render=backend_template,
+    ),
+    "backend_library": ArtifactTemplate(
+        name="backend_library",
+        output_path="omega_forge/generated_backend.py",
+        render=backend_library_template,
+    ),
+    "backend_cli": ArtifactTemplate(
+        name="backend_cli",
+        output_path="omega_forge/generated_backend.py",
+        render=backend_cli_template,
+    ),
+    "backend_api": ArtifactTemplate(
+        name="backend_api",
+        output_path="omega_forge/generated_backend.py",
+        render=backend_api_template,
     ),
     "tests": ArtifactTemplate(
         name="tests",
