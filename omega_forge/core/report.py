@@ -91,7 +91,7 @@ class ReportGenerator:
             return ["No agent run metadata was attached to this report."]
 
         lines: list[str] = []
-        for name in ["planner", "reviewer", "tester"]:
+        for name in ["planner", "executor", "reviewer", "tester"]:
             result = self.agent_results.get(name)
             if not result:
                 lines.append(f"- {name}: not run")
@@ -104,6 +104,12 @@ class ReportGenerator:
             data = result.get("data") or {}
             if name == "planner" and data.get("created_task_ids") is not None:
                 lines.append(f"  - created tasks: {len(data.get('created_task_ids', []))}")
+            if name == "executor":
+                lines.append(f"  - executed: {data.get('executed', False)}")
+                if data.get("task_id"):
+                    lines.append(f"  - task id: {data.get('task_id')}")
+                if data.get("path"):
+                    lines.append(f"  - artifact: {data.get('path')}")
             if name == "reviewer":
                 findings = data.get("findings", [])
                 lines.append(f"  - findings: {len(findings)}")
