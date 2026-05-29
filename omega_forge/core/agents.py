@@ -72,6 +72,41 @@ class PlannerAgent(BaseAgent):
         return [created]
 
 
+class ExecutorAgent(BaseAgent):
+    """Execute simple command tasks through ForgeRuntime sandbox execution."""
+
+    def __init__(self) -> None:
+        super().__init__(name="executor", handled_types=("ExecuteCommand",))
+
+    def handle(self, runtime: ForgeRuntime, message: AgentMessage) -> list[AgentMessage]:
+        raw_command = message.payload.get("command")
+        if not isinstance(raw_command, list) or not raw_command:
+            failed = self.emit(
+                runtime,
+                "ExecutionRejected",
+                payload={
+                    "source_message": message.id,
+                    "reason": "payload.command must be a non-empty list",
+                },
+                correlation_id=message.correlation_id or message.id,
+            )
+            return [failed]
+
+        command = [str(part) for part in raw_command]
+        timeout_seconds = int(message.payload.get("timeout_seconds", 30))
+        _session, execution, _report = runtime.run_in_sandbox(
+            command,
+            timeout_seconds=timeout_seconds,
+        )
+        completed = self.emit(
+            runtime,
+            "ExecutionCompleted",
+            payload=execution.to_dict(),
+            correlation_id=message.correlation_id or message.id,
+        )
+        return [completed]
+
+
 class ValidatorAgent(BaseAgent):
     """Validate sandbox execution results."""
 
