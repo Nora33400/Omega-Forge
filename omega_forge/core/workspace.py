@@ -28,8 +28,9 @@ class WorkspaceRunResult:
 class ForgeWorkspace:
     """Coordinate the minimal Omega-Forge V0 loop."""
 
-    def __init__(self, root: str | Path = ".") -> None:
+    def __init__(self, root: str | Path = ".", max_tasks_per_run: int = 3) -> None:
         self.root = Path(root)
+        self.max_tasks_per_run = max_tasks_per_run
         self.queue_path = self.root / "omega_forge_tasks.json"
         self.state_path = self.root / "omega_forge_state.json"
         self.report_path = self.root / "reports" / "latest_report.md"
@@ -55,7 +56,11 @@ class ForgeWorkspace:
             {"spec_path": str(spec), "queue_path": str(self.queue_path)}
         )
         executor_result = ExecutorAgent().run(
-            {"root": str(self.root), "queue_path": str(self.queue_path)}
+            {
+                "root": str(self.root),
+                "queue_path": str(self.queue_path),
+                "max_tasks": self.max_tasks_per_run,
+            }
         )
         reviewer_result = ReviewerAgent().run({"queue_path": str(self.queue_path)})
         tester_result = TesterAgent().run({"root": str(self.root)})
