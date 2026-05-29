@@ -80,7 +80,10 @@ def test_executor_blocks_unknown_task(tmp_path):
 
     assert result.success is False
     assert result.data["executed"] is False
-    assert "No safe executor rule matched" in result.message
+    assert result.data["executed_count"] == 0
+    assert result.data["blocked_count"] == 1
+    assert result.data["results"][0]["executed"] is False
+    assert "no template rule matched" in result.data["results"][0]["selection_reason"]
 
     reloaded = TaskQueue(queue_path)
     assert reloaded.tasks[0].status == "blocked"
