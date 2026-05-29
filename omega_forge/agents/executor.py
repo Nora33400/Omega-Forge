@@ -11,6 +11,7 @@ from typing import Any
 
 from omega_forge.agents.base import BaseAgent
 from omega_forge.core.task_queue import TaskQueue
+from omega_forge.core.templates import write_template
 
 
 class ExecutorAgent(BaseAgent):
@@ -64,36 +65,32 @@ class ExecutorAgent(BaseAgent):
     def execute_task(root: Path, title: str) -> dict[str, Any]:
         normalized = title.lower().strip()
 
-        if normalized in {"write documentation", "build documentation", "create documentation"}:
-            path = root / "docs" / "generated.md"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if not path.exists():
-                path.write_text("# Generated Documentation\n\nCreated by Omega-Forge ExecutorAgent.\n", encoding="utf-8")
-            return {"executed": True, "message": f"Created documentation file: {path}", "path": str(path)}
+        rules = {
+            "write documentation": "documentation",
+            "build documentation": "documentation",
+            "create documentation": "documentation",
+            "write tests": "tests",
+            "build tests": "tests",
+            "create tests": "tests",
+            "build backend": "backend",
+            "create backend": "backend",
+            "build core": "backend",
+            "create core": "backend",
+        }
 
-        if normalized in {"write tests", "build tests", "create tests"}:
-            path = root / "tests" / "test_generated_placeholder.py"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if not path.exists():
-                path.write_text(
-                    "def test_generated_placeholder():\n    assert True\n",
-                    encoding="utf-8",
-                )
-            return {"executed": True, "message": f"Created placeholder test file: {path}", "path": str(path)}
-
-        if normalized in {"build backend", "create backend"}:
-            path = root / "omega_forge" / "generated_backend.py"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if not path.exists():
-                path.write_text(
-                    "\"\"\"Generated backend placeholder.\"\"\"\n\n"
-                    "def healthcheck():\n    return {\"status\": \"ok\"}\n",
-                    encoding="utf-8",
-                )
-            return {"executed": True, "message": f"Created backend placeholder: {path}", "path": str(path)}
+        template_name = rules.get(normalized)
+        if template_name:
+            path = write_template(root, template_name)
+            return {
+                "executed": True,
+                "message": f"Created {template_name} artifact: {path}",
+                "path": str(path),
+                "template": template_name,
+            }
 
         return {
             "executed": False,
             "message": f"No safe executor rule matched task: {title}",
             "path": None,
+            "template": None,
         }
