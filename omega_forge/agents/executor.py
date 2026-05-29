@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from omega_forge.agents.base import BaseAgent
+from omega_forge.core.context import ContextBuilder, WorkspaceContext
 from omega_forge.core.task_queue import TaskQueue
 from omega_forge.core.templates import write_template
 
@@ -32,21 +33,25 @@ class ExecutorAgent(BaseAgent):
         if not pending:
             return self.ok("No pending task to execute", {"executed": False, "results": []})
 
+        workspace_context = ContextBuilder(root=root, queue_path=queue_path).build()
+
         results: list[dict[str, Any]] = []
         executed_count = 0
         blocked_count = 0
 
         for task in pending[:max_tasks]:
-            result = self.execute_task(root=root, title=task.title)
+            result = self.execute_task(root=root, title=task.title, context=workspace_context)
             result = {"task_id": task.id, "task_title": task.title, **result}
             results.append(result)
 
             if result["executed"]:
                 executed_count += 1
                 queue.set_status(task.id, "done", note=result["message"])
+                workspace_context = ContextBuilder(root=root, queue_path=queue_path).build()
             else:
                 blocked_count += 1
                 queue.set_status(task.id, "blocked", note=result["message"])
+                workspace_context = ContextBuilder(root=root, queue_path=queue_path).build()
 
         message = f"Executed {executed_count} task(s), blocked {blocked_count} task(s)"
         success = executed_count > 0 and blocked_count == 0
@@ -55,6 +60,7 @@ class ExecutorAgent(BaseAgent):
             "executed_count": executed_count,
             "blocked_count": blocked_count,
             "max_tasks": max_tasks,
+            "context": workspace_context.to_dict(),
             "results": results,
         }
         if success:
@@ -62,7 +68,7 @@ class ExecutorAgent(BaseAgent):
         return self.fail(message, data)
 
     @staticmethod
-    def execute_task(root: Path, title: str) -> dict[str, Any]:
+    def execute_task(root: Path, title: str, context: WorkspaceContext) -> dict[str, Any]:
         normalized = title.lower().strip()
 
         rules = {
@@ -80,12 +86,13 @@ class ExecutorAgent(BaseAgent):
 
         template_name = rules.get(normalized)
         if template_name:
-            path = write_template(root, template_name)
+            path = write_template(root, template_name, context)
             return {
                 "executed": True,
                 "message": f"Created {template_name} artifact: {path}",
                 "path": str(path),
                 "template": template_name,
+                "project_type": context.project_type,
             }
 
         return {
@@ -93,4 +100,5 @@ class ExecutorAgent(BaseAgent):
             "message": f"No safe executor rule matched task: {title}",
             "path": None,
             "template": None,
+            "project_type": context.project_type,
         }
