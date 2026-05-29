@@ -17,9 +17,15 @@ def utc_now() -> str:
 class ReportGenerator:
     """Generate human-readable Markdown reports from project state and tasks."""
 
-    def __init__(self, queue: TaskQueue, state: ProjectState) -> None:
+    def __init__(
+        self,
+        queue: TaskQueue,
+        state: ProjectState,
+        agent_results: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         self.queue = queue
         self.state = state
+        self.agent_results = agent_results or {}
 
     def build_markdown(self) -> str:
         state_summary = self.state.summary()
@@ -41,6 +47,10 @@ class ReportGenerator:
         lines.append(f"- Completed tasks recorded: {state_summary['completed_tasks']}")
         lines.append(f"- Failed tasks recorded: {state_summary['failed_tasks']}")
         lines.append(f"- Reports known: {state_summary['reports']}")
+        lines.append("")
+        lines.append("## Agent run summary")
+        lines.append("")
+        lines.extend(self._agent_result_lines())
         lines.append("")
         lines.append("## Task summary")
         lines.append("")
@@ -65,7 +75,7 @@ class ReportGenerator:
         lines.append("")
         lines.append("## Recommended next action")
         lines.append("")
-        lines.append(self._recommendation(task_summary))
+        lines.append(self._recommendation(task_summary, pending_tasks))
         lines.append("")
         return "\n".join(lines)
 
@@ -75,6 +85,34 @@ class ReportGenerator:
         output.write_text(self.build_markdown(), encoding="utf-8")
         self.state.add_report(output)
         return output
+
+    def _agent_result_lines(self) -> list[str]:
+        if not self.agent_results:
+            return ["No agent run metadata was attached to this report."]
+
+        lines: list[str] = []
+        for name in ["planner", "reviewer", "tester"]:
+            result = self.agent_results.get(name)
+            if not result:
+                lines.append(f"- {name}: not run")
+                continue
+
+            success = result.get("success")
+            status = "ok" if success else "failed"
+            lines.append(f"- {name}: {status} — {result.get('message', 'No message')}")
+
+            data = result.get("data") or {}
+            if name == "planner" and data.get("created_task_ids") is not None:
+                lines.append(f"  - created tasks: {len(data.get('created_task_ids', []))}")
+            if name == "reviewer":
+                findings = data.get("findings", [])
+                lines.append(f"  - findings: {len(findings)}")
+                for finding in findings[:10]:
+                    lines.append(f"    - {finding}")
+            if name == "tester" and data.get("score") is not None:
+                lines.append(f"  - score: {data.get('score')}/{data.get('max_score')}")
+
+        return lines
 
     @staticmethod
     def _task_lines(tasks: list[Any], empty: str) -> list[str]:
@@ -88,11 +126,12 @@ class ReportGenerator:
         return lines
 
     @staticmethod
-    def _recommendation(summary: dict[str, int]) -> str:
+    def _recommendation(summary: dict[str, int], pending_tasks: list[Any]) -> str:
         if summary.get("failed", 0) > 0:
             return "Repair failed tasks before adding new scope."
         if summary.get("blocked", 0) > 0:
             return "Resolve blocked tasks or split them into smaller tasks."
-        if summary.get("pending", 0) > 0:
-            return "Pick the highest-priority pending task and execute it."
+        if pending_tasks:
+            first = sorted(pending_tasks, key=lambda task: task.priority)[0]
+            return f"Execute next task: `{first.id}` — {first.title}."
         return "No pending task. Generate a new plan from the current specification."
