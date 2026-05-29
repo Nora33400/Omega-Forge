@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from omega_forge.agents.executor import ExecutorAgent
 from omega_forge.agents.planner import PlannerAgent
 from omega_forge.agents.reviewer import ReviewerAgent
 from omega_forge.agents.tester import TesterAgent
@@ -18,6 +19,7 @@ from omega_forge.core.task_queue import TaskQueue
 class WorkspaceRunResult:
     spec_path: str
     planner: dict[str, Any]
+    executor: dict[str, Any]
     reviewer: dict[str, Any]
     tester: dict[str, Any]
     report_path: str
@@ -52,12 +54,15 @@ class ForgeWorkspace:
         planner_result = PlannerAgent().run(
             {"spec_path": str(spec), "queue_path": str(self.queue_path)}
         )
-
+        executor_result = ExecutorAgent().run(
+            {"root": str(self.root), "queue_path": str(self.queue_path)}
+        )
         reviewer_result = ReviewerAgent().run({"queue_path": str(self.queue_path)})
         tester_result = TesterAgent().run({"root": str(self.root)})
 
         agent_results = {
             "planner": planner_result.__dict__,
+            "executor": executor_result.__dict__,
             "reviewer": reviewer_result.__dict__,
             "tester": tester_result.__dict__,
         }
@@ -71,6 +76,7 @@ class ForgeWorkspace:
         return WorkspaceRunResult(
             spec_path=str(spec),
             planner=planner_result.__dict__,
+            executor=executor_result.__dict__,
             reviewer=reviewer_result.__dict__,
             tester=tester_result.__dict__,
             report_path=str(written),
