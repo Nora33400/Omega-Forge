@@ -12,6 +12,7 @@ from typing import Any
 from omega_forge.agents.base import BaseAgent
 from omega_forge.core.context import ContextBuilder, WorkspaceContext
 from omega_forge.core.task_queue import TaskQueue
+from omega_forge.core.template_selector import TemplateSelector
 from omega_forge.core.templates import write_template
 
 
@@ -34,13 +35,19 @@ class ExecutorAgent(BaseAgent):
             return self.ok("No pending task to execute", {"executed": False, "results": []})
 
         workspace_context = ContextBuilder(root=root, queue_path=queue_path).build()
+        selector = TemplateSelector()
 
         results: list[dict[str, Any]] = []
         executed_count = 0
         blocked_count = 0
 
         for task in pending[:max_tasks]:
-            result = self.execute_task(root=root, title=task.title, context=workspace_context)
+            result = self.execute_task(
+                root=root,
+                title=task.title,
+                context=workspace_context,
+                selector=selector,
+            )
             result = {"task_id": task.id, "task_title": task.title, **result}
             results.append(result)
 
@@ -68,37 +75,31 @@ class ExecutorAgent(BaseAgent):
         return self.fail(message, data)
 
     @staticmethod
-    def execute_task(root: Path, title: str, context: WorkspaceContext) -> dict[str, Any]:
-        normalized = title.lower().strip()
+    def execute_task(
+        root: Path,
+        title: str,
+        context: WorkspaceContext,
+        selector: TemplateSelector | None = None,
+    ) -> dict[str, Any]:
+        selector = selector or TemplateSelector()
+        selection = selector.select(title, context)
 
-        rules = {
-            "write documentation": "documentation",
-            "build documentation": "documentation",
-            "create documentation": "documentation",
-            "write tests": "tests",
-            "build tests": "tests",
-            "create tests": "tests",
-            "build backend": "backend",
-            "create backend": "backend",
-            "build core": "backend",
-            "create core": "backend",
-        }
-
-        template_name = rules.get(normalized)
-        if template_name:
-            path = write_template(root, template_name, context)
+        if selection.template_name:
+            path = write_template(root, selection.template_name, context)
             return {
                 "executed": True,
-                "message": f"Created {template_name} artifact: {path}",
+                "message": f"Created {selection.template_name} artifact: {path}",
                 "path": str(path),
-                "template": template_name,
+                "template": selection.template_name,
+                "selection_reason": selection.reason,
                 "project_type": context.project_type,
             }
 
         return {
             "executed": False,
-            "message": f"No safe executor rule matched task: {title}",
+            "message": selection.reason,
             "path": None,
             "template": None,
+            "selection_reason": selection.reason,
             "project_type": context.project_type,
         }
