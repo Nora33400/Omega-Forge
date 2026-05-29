@@ -32,10 +32,42 @@ class TemplateSelector:
             return TemplateSelection("tests", reason)
 
         if normalized in {"build backend", "create backend", "build core", "create core"}:
-            if context.project_type == "python_package":
-                return TemplateSelection("backend", "backend/core task matched for python package")
-            if context.project_type == "python_project":
-                return TemplateSelection("backend", "backend/core task matched for python project")
-            return TemplateSelection("backend", "backend/core task matched for generic workspace")
+            return self._select_backend_template(context)
 
         return TemplateSelection(None, f"no template rule matched task: {task_title}")
+
+    @staticmethod
+    def _select_backend_template(context: WorkspaceContext) -> TemplateSelection:
+        python_files = set(context.python_files)
+        lower_files = {path.lower() for path in python_files}
+
+        if any("fastapi" in path for path in lower_files) or any(
+            path.endswith("api.py") or "/api/" in path for path in lower_files
+        ):
+            return TemplateSelection(
+                "backend_api",
+                "backend/core task matched; API-like files detected",
+            )
+
+        if "main.py" in lower_files or any(path.endswith("/cli.py") for path in lower_files):
+            return TemplateSelection(
+                "backend_cli",
+                "backend/core task matched; CLI entrypoint detected",
+            )
+
+        if context.project_type == "python_package":
+            return TemplateSelection(
+                "backend_library",
+                "backend/core task matched for python package",
+            )
+
+        if context.project_type == "python_project":
+            return TemplateSelection(
+                "backend_cli",
+                "backend/core task matched for python project",
+            )
+
+        return TemplateSelection(
+            "backend_library",
+            "backend/core task matched for generic workspace",
+        )
