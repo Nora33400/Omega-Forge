@@ -1,0 +1,2 @@
+# Omega Forge Vision
+Placeholder
