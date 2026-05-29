@@ -56,7 +56,16 @@ class ForgeWorkspace:
         reviewer_result = ReviewerAgent().run({"queue_path": str(self.queue_path)})
         tester_result = TesterAgent().run({"root": str(self.root)})
 
-        report = ReportGenerator(queue=self.queue(), state=self.state())
+        agent_results = {
+            "planner": planner_result.__dict__,
+            "reviewer": reviewer_result.__dict__,
+            "tester": tester_result.__dict__,
+        }
+        report = ReportGenerator(
+            queue=self.queue(),
+            state=self.state(),
+            agent_results=agent_results,
+        )
         written = report.write(self.report_path)
 
         return WorkspaceRunResult(
