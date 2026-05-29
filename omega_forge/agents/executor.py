@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from omega_forge.agents.base import BaseAgent
+from omega_forge.core.artifact_validator import ArtifactValidator
 from omega_forge.core.context import ContextBuilder, WorkspaceContext
 from omega_forge.core.task_queue import TaskQueue
 from omega_forge.core.template_selector import TemplateSelector
@@ -36,6 +37,7 @@ class ExecutorAgent(BaseAgent):
 
         workspace_context = ContextBuilder(root=root, queue_path=queue_path).build()
         selector = TemplateSelector()
+        validator = ArtifactValidator()
 
         results: list[dict[str, Any]] = []
         executed_count = 0
@@ -47,6 +49,7 @@ class ExecutorAgent(BaseAgent):
                 title=task.title,
                 context=workspace_context,
                 selector=selector,
+                validator=validator,
             )
             result = {"task_id": task.id, "task_title": task.title, **result}
             results.append(result)
@@ -80,19 +83,33 @@ class ExecutorAgent(BaseAgent):
         title: str,
         context: WorkspaceContext,
         selector: TemplateSelector | None = None,
+        validator: ArtifactValidator | None = None,
     ) -> dict[str, Any]:
         selector = selector or TemplateSelector()
+        validator = validator or ArtifactValidator()
         selection = selector.select(title, context)
 
         if selection.template_name:
             path = write_template(root, selection.template_name, context)
+            validation = validator.validate(root, path)
+            if not validation.ok:
+                return {
+                    "executed": False,
+                    "message": f"Artifact validation failed for {path}",
+                    "path": str(path),
+                    "template": selection.template_name,
+                    "selection_reason": selection.reason,
+                    "project_type": context.project_type,
+                    "validation": validation.__dict__,
+                }
             return {
                 "executed": True,
-                "message": f"Created {selection.template_name} artifact: {path}",
+                "message": f"Created and validated {selection.template_name} artifact: {path}",
                 "path": str(path),
                 "template": selection.template_name,
                 "selection_reason": selection.reason,
                 "project_type": context.project_type,
+                "validation": validation.__dict__,
             }
 
         return {
@@ -102,4 +119,5 @@ class ExecutorAgent(BaseAgent):
             "template": None,
             "selection_reason": selection.reason,
             "project_type": context.project_type,
+            "validation": None,
         }
