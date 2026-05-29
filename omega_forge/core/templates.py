@@ -9,19 +9,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from omega_forge.core.context import WorkspaceContext
+
 
 @dataclass(frozen=True)
 class ArtifactTemplate:
     name: str
     output_path: str
-    render: Callable[[], str]
+    render: Callable[[WorkspaceContext], str]
 
 
-def backend_template() -> str:
-    return '''"""Generated backend module for Omega-Forge.
+def backend_template(context: WorkspaceContext) -> str:
+    return f'''"""Generated backend module for Omega-Forge.
 
-This module is intentionally minimal. It proves that the executor can turn
-an allowed task into a Python artifact that can be imported and tested.
+This module was generated from an observed workspace context.
+Project type: {context.project_type}
+Docs detected: {context.has_docs}
+Tests detected: {context.has_tests}
 """
 
 from __future__ import annotations
@@ -30,38 +34,60 @@ from __future__ import annotations
 def healthcheck() -> dict[str, str]:
     """Return a minimal service health payload."""
 
-    return {"status": "ok", "service": "omega_forge_generated_backend"}
+    return {{
+        "status": "ok",
+        "service": "omega_forge_generated_backend",
+        "project_type": "{context.project_type}",
+    }}
 '''
 
 
-def test_template() -> str:
-    return '''from omega_forge.generated_backend import healthcheck
+def test_template(context: WorkspaceContext) -> str:
+    return f'''from omega_forge.generated_backend import healthcheck
 
 
 def test_generated_backend_healthcheck():
-    assert healthcheck()["status"] == "ok"
+    payload = healthcheck()
+    assert payload["status"] == "ok"
+    assert payload["project_type"] == "{context.project_type}"
 '''
 
 
-def documentation_template() -> str:
-    return '''# Generated Documentation
+def documentation_template(context: WorkspaceContext) -> str:
+    pending = "\n".join(f"- {title}" for title in context.pending_tasks) or "- No pending tasks"
+    done = "\n".join(f"- {title}" for title in context.done_tasks) or "- No completed tasks"
+    blocked = "\n".join(f"- {title}" for title in context.blocked_tasks) or "- No blocked tasks"
 
-This document was created by Omega-Forge ExecutorAgent.
+    return f'''# Generated Documentation
 
-## Purpose
+This document was created by Omega-Forge ExecutorAgent from workspace context.
 
-Provide a first generated documentation artifact from a planned task.
+## Context snapshot
 
-## Current limitations
+- Project type: `{context.project_type}`
+- Docs detected: `{context.has_docs}`
+- Tests detected: `{context.has_tests}`
+- Core detected: `{context.has_core}`
+- Agents detected: `{context.has_agents}`
+- Python files detected: `{len(context.python_files)}`
+- Markdown files detected: `{len(context.markdown_files)}`
 
-- Template-based output only.
-- No LLM synthesis yet.
-- No project-specific deep analysis yet.
+## Pending tasks
+
+{pending}
+
+## Completed tasks
+
+{done}
+
+## Blocked tasks
+
+{blocked}
 
 ## Next improvement
 
-Replace static sections with context-aware generation from the project state,
-task queue, and repository files.
+Use this context snapshot to select richer task-specific generators instead of
+static templates.
 '''
 
 
@@ -84,9 +110,9 @@ TEMPLATES: dict[str, ArtifactTemplate] = {
 }
 
 
-def write_template(root: Path, template_name: str) -> Path:
+def write_template(root: Path, template_name: str, context: WorkspaceContext) -> Path:
     template = TEMPLATES[template_name]
     output = root / template.output_path
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(template.render(), encoding="utf-8")
+    output.write_text(template.render(context), encoding="utf-8")
     return output
