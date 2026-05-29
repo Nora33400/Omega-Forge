@@ -52,6 +52,10 @@ class ReportGenerator:
         lines.append("")
         lines.extend(self._agent_result_lines())
         lines.append("")
+        lines.append("## Generated artifacts")
+        lines.append("")
+        lines.extend(self._artifact_lines())
+        lines.append("")
         lines.append("## Task summary")
         lines.append("")
         for key in ["total", "pending", "running", "done", "failed", "blocked"]:
@@ -106,10 +110,10 @@ class ReportGenerator:
                 lines.append(f"  - created tasks: {len(data.get('created_task_ids', []))}")
             if name == "executor":
                 lines.append(f"  - executed: {data.get('executed', False)}")
-                if data.get("task_id"):
-                    lines.append(f"  - task id: {data.get('task_id')}")
-                if data.get("path"):
-                    lines.append(f"  - artifact: {data.get('path')}")
+                if data.get("executed_count") is not None:
+                    lines.append(f"  - executed count: {data.get('executed_count')}")
+                if data.get("blocked_count") is not None:
+                    lines.append(f"  - blocked count: {data.get('blocked_count')}")
             if name == "reviewer":
                 findings = data.get("findings", [])
                 lines.append(f"  - findings: {len(findings)}")
@@ -119,6 +123,22 @@ class ReportGenerator:
                 lines.append(f"  - score: {data.get('score')}/{data.get('max_score')}")
 
         return lines
+
+    def _artifact_lines(self) -> list[str]:
+        executor = self.agent_results.get("executor") or {}
+        data = executor.get("data") or {}
+        results = data.get("results", [])
+
+        artifacts = []
+        for item in results:
+            path = item.get("path")
+            if path:
+                artifacts.append((item.get("task_title", "unknown task"), path))
+
+        if not artifacts:
+            return ["No artifacts generated in this run."]
+
+        return [f"- {task_title}: `{path}`" for task_title, path in artifacts]
 
     @staticmethod
     def _task_lines(tasks: list[Any], empty: str) -> list[str]:
